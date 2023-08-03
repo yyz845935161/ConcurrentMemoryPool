@@ -16,8 +16,8 @@ void *AllocBenchmarkMalloc(void *arg)
         size_t begin1 = clock();
         for (size_t i = 0; i < ntimes; i++)
         {
-            v.push_back(malloc(16));
-            // v.push_back(malloc((16 + i) % 4096 + 1));
+            // v.push_back(malloc(16));
+            v.push_back(malloc((16 + i) % 4096 + 1));
         }
         size_t end1 = clock();
         size_t begin2 = clock();
@@ -94,6 +94,7 @@ void BenchmarkMalloc(size_t ntimes, size_t nworks, size_t rounds)
     }
     double _malloc_costtime = (double)malloc_costtime/ CLOCKS_PER_SEC * 1000;
     double _free_costtime = (double)free_costtime/ CLOCKS_PER_SEC * 1000;
+    printf("malloc 下性能：\n");
     printf("%zu个线程并发执行%zu轮次，每轮次malloc %zu次: 花费：%.f ms\n",
            nworks, rounds, ntimes, _malloc_costtime);
     printf("%zu个线程并发执行%zu轮次，每轮次free %zu次: 花费：%.f ms\n",
@@ -127,6 +128,8 @@ void BenchmarkConcurrentMalloc(size_t ntimes, size_t nworks, size_t rounds)
     }
     double _malloc_costtime = (double)malloc_costtime/ CLOCKS_PER_SEC * 1000;
     double _free_costtime = (double)free_costtime/ CLOCKS_PER_SEC * 1000;
+    printf("ConcurrentMemoryPool 下性能：\n");
+
     printf("%zu个线程并发执行%zu轮次，每轮次malloc %zu次: 花费：%.f ms\n",
            nworks, rounds, ntimes, _malloc_costtime);
     printf("%zu个线程并发执行%zu轮次，每轮次free %zu次: 花费：%.f ms\n",

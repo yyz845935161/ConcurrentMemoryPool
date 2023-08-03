@@ -1,13 +1,11 @@
+// long unsigned int
 #include <iostream>
-#include <vector>
-using namespace  std;
-
-void* p = ((void*)-1);
-void *p2 = nullptr;
+using namespace std;
 
 int main()
 {
-    cout<<(p==p2)<<endl;
-
+    size_t a = 1;
+    cout<<sizeof(long unsigned int)<<endl;
+    
     return 0;
 }

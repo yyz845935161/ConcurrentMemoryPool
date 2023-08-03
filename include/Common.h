@@ -9,6 +9,8 @@
 #include <mutex>
 #include <algorithm>
 #include <unordered_map>
+#include<string.h>
+// #include<memory>
 #ifdef _WIN32
 #include <windows.h>
 #else

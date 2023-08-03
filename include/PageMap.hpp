@@ -1,7 +1,10 @@
 #pragma once
 #include"Common.h"
 
+// 基数树
 // Single-level array
+//BITS 存储页号需要多少位  64位必须用三层
+// 32位下   32- PAGE_SHIFT   = 2^19  占用内存: 2^19 *4 = 2^21 = 2M
 template <int BITS>
 class TCMalloc_PageMap1 {
 private:
@@ -11,9 +14,9 @@ private:
 public:
 	typedef uintptr_t Number;
 
-	//explicit TCMalloc_PageMap1(void* (*allocator)(size_t)) {
+	// explicit TCMalloc_PageMap1(void* (*allocator)(size_t)) {
 	explicit TCMalloc_PageMap1() {
-		//array_ = reinterpret_cast<void**>((*allocator)(sizeof(void*) << BITS));
+		// array_ = reinterpret_cast<void**>((*allocator)(sizeof(void*) << BITS));
 		size_t size = sizeof(void*) << BITS;
 		size_t alignSize = SizeClass::_RoundUp(size, 1<<PAGE_SHIFT);
 		array_ = (void**)SystemAlloc(alignSize>>PAGE_SHIFT);
@@ -38,7 +41,9 @@ public:
 	}
 };
 
-// Two-level radix tree
+// Two-level radix tree 也适用32位
+// 两层基数树 第一层固定32 个
+// 第二层有2^14 
 template <int BITS>
 class TCMalloc_PageMap2 {
 private:
@@ -80,7 +85,7 @@ public:
 	void set(Number k, void* v) {
 		const Number i1 = k >> LEAF_BITS;
 		const Number i2 = k & (LEAF_LENGTH - 1);
-		ASSERT(i1 < ROOT_LENGTH);
+		assert(i1 < ROOT_LENGTH);
 		root_[i1]->values[i2] = v;
 	}
 
@@ -115,17 +120,29 @@ public:
 	}
 };
 
+static const int INTERIOR_BITS = 18;
+static const int INTERIOR_LENGTH = 262144;
+// static const int INTERIOR_LENGTH = 100;
+static const int LEAF_BITS = 16;  //16
+static const int LEAF_LENGTH = 65536;
+
 // Three-level radix tree
+//适用于64位 
 template <int BITS>
 class TCMalloc_PageMap3 {
 private:
 	// How many bits should we consume at each interior level
-	static const int INTERIOR_BITS = (BITS + 2) / 3; // Round-up
-	static const int INTERIOR_LENGTH = 1 << INTERIOR_BITS;
+	// static const int INTERIOR_BITS = (BITS + 2) / 3; // Round-up  //18
+	// static const int INTERIOR_LENGTH = 1 << INTERIOR_BITS;  //262144
 
-	// How many bits should we consume at leaf level
-	static const int LEAF_BITS = BITS - 2 * INTERIOR_BITS;
-	static const int LEAF_LENGTH = 1 << LEAF_BITS;
+	// // How many bits should we consume at leaf level
+	// static const int LEAF_BITS = BITS - 2 * INTERIOR_BITS;  //16
+	// static const int LEAF_LENGTH = 1 << LEAF_BITS; //65536
+
+	// static const int INTERIOR_BITS = 18;
+	// static const int INTERIOR_LENGTH = 262144;
+	// static const int LEAF_BITS = 16;  //16
+	// static const int LEAF_LENGTH = 65536;
 
 	// Interior node
 	struct Node {
@@ -141,20 +158,36 @@ private:
 	void* (*allocator_)(size_t);          // Memory allocator
 
 	Node* NewNode() {
-		Node* result = reinterpret_cast<Node*>((*allocator_)(sizeof(Node)));
+		// Node* result = reinterpret_cast<Node*>((*allocator_)(sizeof(Node)));
+		// if (result != NULL) {
+		// 	memset(result, 0, sizeof(*result));
+		// }
+		static ObjectPool<Node>	NodePool;
+		Node* result = (Node*)NodePool.New();
 		if (result != NULL) {
 			memset(result, 0, sizeof(*result));
 		}
+
 		return result;
 	}
 
 public:
 	typedef uintptr_t Number;
 
-	explicit TCMalloc_PageMap3(void* (*allocator)(size_t)) {
-		allocator_ = allocator;
+	// explicit TCMalloc_PageMap3(void* (*allocator)(size_t)) {
+	// 	allocator_ = allocator;
+	// 	root_ = NewNode();
+	// }
+
+	explicit TCMalloc_PageMap3() {
+		// allocator_ = allocator;
+
 		root_ = NewNode();
+		// PreallocateMoreMemory() ;
 	}
+
+
+
 
 	void* get(Number k) const {
 		const Number i1 = k >> (LEAF_BITS + INTERIOR_BITS);
@@ -168,7 +201,8 @@ public:
 	}
 
 	void set(Number k, void* v) {
-		ASSERT(k >> BITS == 0);
+		Ensure(k, (size_t)1 << INTERIOR_BITS);
+		assert(k >> BITS == 0);
 		const Number i1 = k >> (LEAF_BITS + INTERIOR_BITS);
 		const Number i2 = (k >> LEAF_BITS) & (INTERIOR_LENGTH - 1);
 		const Number i3 = k & (LEAF_LENGTH - 1);
@@ -176,35 +210,72 @@ public:
 	}
 
 	bool Ensure(Number start, size_t n) {
-		for (Number key = start; key <= start + n - 1;) {
-			const Number i1 = key >> (LEAF_BITS + INTERIOR_BITS);
-			const Number i2 = (key >> LEAF_BITS) & (INTERIOR_LENGTH - 1);
+		// for (Number key = start; key <= start + n - 1;) {
+		// 	const Number i1 = key >> (LEAF_BITS + INTERIOR_BITS);
+		// 	const Number i2 = (key >> LEAF_BITS) & (INTERIOR_LENGTH - 1);
 
-			// Check for overflow
-			if (i1 >= INTERIOR_LENGTH || i2 >= INTERIOR_LENGTH)
+		// 	// Check for overflow
+		// 	if (i1 >= INTERIOR_LENGTH || i2 >= INTERIOR_LENGTH)
+		// 		return false;
+
+		// 	// Make 2nd level node if necessary
+		// 	if (root_->ptrs[i1] == NULL) {
+		// 		Node* n = NewNode();
+		// 		if (n == NULL) return false;
+		// 		root_->ptrs[i1] = n;
+		// 	}
+
+		// 	// Make leaf node if necessary
+		// 	if (root_->ptrs[i1]->ptrs[i2] == NULL) {
+		// 		// Leaf* leaf = reinterpret_cast<Leaf*>((*allocator_)(sizeof(Leaf)));
+		// 		// if (leaf == NULL) return false;
+		// 		static ObjectPool<Leaf>	leafPool;
+		// 		Leaf* leaf = (Leaf*)leafPool.New();
+
+		// 		memset(leaf, 0, sizeof(*leaf));
+		// 		root_->ptrs[i1]->ptrs[i2] = reinterpret_cast<Node*>(leaf);
+		// 	}
+
+		// 	// Advance key past whatever is covered by this leaf node
+		// 	key = ((key >> LEAF_BITS) + 1) << LEAF_BITS;
+		// }
+		Number key = start;
+		const Number i1 = key >> (LEAF_BITS + INTERIOR_BITS);
+		const Number i2 = (key >> LEAF_BITS) & (INTERIOR_LENGTH - 1);
+
+		// Check for overflow
+		if (i1 >= INTERIOR_LENGTH || i2 >= INTERIOR_LENGTH)
+			return false;
+
+		// Make 2nd level node if necessary
+		if (root_->ptrs[i1] == NULL) {
+			Node* n = NewNode();
+			if (n == NULL) 
+			{
+				assert(false);
 				return false;
-
-			// Make 2nd level node if necessary
-			if (root_->ptrs[i1] == NULL) {
-				Node* n = NewNode();
-				if (n == NULL) return false;
-				root_->ptrs[i1] = n;
 			}
-
-			// Make leaf node if necessary
-			if (root_->ptrs[i1]->ptrs[i2] == NULL) {
-				Leaf* leaf = reinterpret_cast<Leaf*>((*allocator_)(sizeof(Leaf)));
-				if (leaf == NULL) return false;
-				memset(leaf, 0, sizeof(*leaf));
-				root_->ptrs[i1]->ptrs[i2] = reinterpret_cast<Node*>(leaf);
-			}
-
-			// Advance key past whatever is covered by this leaf node
-			key = ((key >> LEAF_BITS) + 1) << LEAF_BITS;
+			root_->ptrs[i1] = n;
 		}
+
+		// Make leaf node if necessary
+		if (root_->ptrs[i1]->ptrs[i2] == NULL) {
+			// Leaf* leaf = reinterpret_cast<Leaf*>((*allocator_)(sizeof(Leaf)));
+			// if (leaf == NULL) return false;
+			static ObjectPool<Leaf>	leafPool;
+			Leaf* leaf = (Leaf*)leafPool.New();
+
+			memset(leaf, 0, sizeof(*leaf));
+			root_->ptrs[i1]->ptrs[i2] = reinterpret_cast<Node*>(leaf);
+		}
+
+		// Advance key past whatever is covered by this leaf node
+		key = ((key >> LEAF_BITS) + 1) << LEAF_BITS;
+		
 		return true;
 	}
 
 	void PreallocateMoreMemory() {
+		// Ensure(0, (size_t)1 << BITS);
 	}
 };

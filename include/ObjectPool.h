@@ -61,9 +61,18 @@ public:
             // 剩余内存不够一个对象大小，则重新开辟大空间
             if (_remainBytes < sizeof(T))
             {
+                if(sizeof(T) < 128 * 1024)
                 _remainBytes = 128 * 1024;
+                else
+                {
+                    _remainBytes = sizeof(T);
+                }
+                
+                size_t size = _remainBytes;
+		        size_t alignSize = SizeClass::_RoundUp(size, 1<<PAGE_SHIFT);
+
                 // _memory = (char *)malloc(128 * 1024);
-                _memory = (char *)SystemAlloc(32);//一页是4kb 128kb是32页
+                _memory = (char *)SystemAlloc(alignSize>>PAGE_SHIFT);//一页是4kb 128kb是32页
                 if (_memory == nullptr)
                 {
                     throw std::bad_alloc();
